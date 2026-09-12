@@ -40,8 +40,20 @@ public static class RawWindowsPrinter {
 
     public static void Send(string printerName, byte[] data) {
         IntPtr printer = IntPtr.Zero;
-        if (!OpenPrinter(printerName, out printer, IntPtr.Zero)) {
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "No se pudo abrir la cola de impresión.");
+        string[] candidates = new string[] {
+            printerName,
+            "\\\\localhost\\" + printerName,
+            "\\\\" + Environment.MachineName + "\\" + printerName,
+        };
+        int lastError = 0;
+        foreach (string candidate in candidates) {
+            if (OpenPrinter(candidate, out printer, IntPtr.Zero)) {
+                break;
+            }
+            lastError = Marshal.GetLastWin32Error();
+        }
+        if (printer == IntPtr.Zero) {
+            throw new Win32Exception(lastError, "No se pudo abrir la cola de impresión: " + printerName);
         }
 
         bool documentStarted = false;
@@ -62,9 +74,9 @@ public static class RawWindowsPrinter {
             var pinned = GCHandle.Alloc(data, GCHandleType.Pinned);
             try {
                 int written;
-                if (!WritePrinter(printer, pinned.AddrOfPinnedObject(), data.Length, out written) || written != data.Length) {
-                    throw new Win32Exception(Marshal.GetLastWin32Error(), "La cola no aceptó todos los datos RAW.");
-                }
+            if (!WritePrinter(printer, pinned.AddrOfPinnedObject(), data.Length, out written) || written != data.Length) {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "La cola no aceptó todos los datos RAW.");
+            }
             } finally {
                 pinned.Free();
             }
