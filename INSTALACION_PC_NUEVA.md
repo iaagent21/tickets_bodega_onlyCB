@@ -1,17 +1,17 @@
-# Configuración de una PC nueva para imprimir tickets
+# Instalación rápida de Tickets OnlyCB
 
-Guía para instalar y dejar el listener ejecutándose automáticamente al iniciar sesión en Windows.
+Guía para instalar el listener en una PC Windows y dejarlo iniciando solo al iniciar sesión.
 
 ## 1. Instalar Git y Node.js
 
-Abre PowerShell como usuario normal y ejecuta:
+Abre PowerShell y ejecuta:
 
 ```powershell
 winget install --id Git.Git -e --source winget
 winget install --id OpenJS.NodeJS.LTS -e --source winget
 ```
 
-Cierra PowerShell, abre una ventana nueva y verifica:
+Cierra PowerShell, abre uno nuevo y verifica:
 
 ```powershell
 git --version
@@ -21,124 +21,102 @@ npm.cmd --version
 
 Node.js debe ser versión 18 o superior.
 
-> En PowerShell se usa `npm.cmd` porque algunas computadoras bloquean la ejecución de `npm.ps1`.
-
 ## 2. Descargar el proyecto
 
 ```powershell
 New-Item -ItemType Directory -Path C:\Apps -Force
-git clone https://github.com/iaagent21/tickets_bodega.git C:\Apps\tickets_bodega
-Set-Location C:\Apps\tickets_bodega
-Copy-Item .env.example .env
+git clone https://github.com/iaagent21/tickets_bodega_onlyCB.git C:\Apps\tickets_bodega_onlyCB
+Set-Location C:\Apps\tickets_bodega_onlyCB
 npm.cmd ci
+Copy-Item .env.example .env
+notepad .env
 ```
 
-## 3. Identificar la impresora local
-
-Ejecuta:
-
-```powershell
-Get-CimInstance Win32_Printer |
-Where-Object { $_.Local -eq $true -and $_.Network -eq $false } |
-Select-Object Name,Default,PortName,SystemName |
-Format-Table -Auto
-```
-
-Usa el nombre exacto de la impresora física. No uses impresoras PDF, OneNote, XPS o Fax. La impresora debe ser local; no debe aparecer como una impresora compartida de otra PC.
-
-## 4. Configurar el archivo `.env`
-
-```powershell
-notepad C:\Apps\tickets_bodega\.env
-```
-
-Configura los valores correspondientes:
+Configura estos valores:
 
 ```env
-STORE_USER_EMAIL=correo_de_la_api
+STORE_USER_EMAIL=usuario_de_la_api
 STORE_USER_PASSWORD=contraseña
 API_URL=https://ferreteriasgd-api-cb.w8k0jk.easypanel.host
 TIENDA=la4ta
 AUTO_PRINT=true
-PRINTER_NAME=NombreExactoDeLaImpresora
-TICKET_CLIENT_ID=pc-tickets-la4ta-03
+PRINTER_NAME=Nombre_exacto_de_la_impresora_termica
+TICKET_CLIENT_ID=pc-tickets-la4ta-01
 ```
 
-El usuario debe tener acceso activo a la aplicación `etiquetas`, permiso de consulta y acceso a `TIENDA`. La PC no necesita ni debe tener variables o claves de Supabase.
+El usuario debe tener acceso a `etiquetas`, permiso de consulta y acceso a la tienda. No configures variables de Supabase. Cada PC debe usar un `TICKET_CLIENT_ID` diferente.
 
-No dejes vacío `PRINTER_NAME`, porque entonces Windows usará la impresora predeterminada, que podría ser una impresora compartida.
+## 3. Probar antes de automatizar
 
-Cada PC debe tener un `TICKET_CLIENT_ID` diferente. Para generar uno nuevo:
+Genera un PDF sin imprimir:
 
 ```powershell
-[guid]::NewGuid().ToString()
+$env:AUTO_PRINT = "false"
+node test-print.js 0098098
+Start-Process .\tickets\pedido_0098098.pdf
 ```
 
-Verifica la configuración sin mostrar la contraseña:
+Si el PDF es correcto, elimina la variable temporal:
 
 ```powershell
-Get-Content C:\Apps\tickets_bodega\.env |
-Select-String '^(PRINTER_NAME|TICKET_CLIENT_ID|TIENDA|AUTO_PRINT|API_URL)='
+Remove-Item Env:AUTO_PRINT
 ```
 
-## 5. Crear el inicio oculto
+Para imprimir físicamente, `PRINTER_NAME` debe ser el nombre de la impresora térmica, no Microsoft Print to PDF ni XPS.
+
+## 4. Iniciar automáticamente y oculto
+
+Crea el archivo de inicio:
 
 ```powershell
-notepad C:\Apps\tickets_bodega\start-listener.vbs
+notepad C:\Apps\tickets_bodega_onlyCB\start-listener.vbs
 ```
 
 Pega y guarda:
 
 ```vbscript
 Set shell = CreateObject("WScript.Shell")
-shell.CurrentDirectory = "C:\Apps\tickets_bodega"
+shell.CurrentDirectory = "C:\Apps\tickets_bodega_onlyCB"
 
 nodePath = "C:\Program Files\nodejs\node.exe"
-scriptPath = "C:\Apps\tickets_bodega\listener.js"
+scriptPath = "C:\Apps\tickets_bodega_onlyCB\listener.js"
 
 shell.Run Chr(34) & nodePath & Chr(34) & " " & Chr(34) & scriptPath & Chr(34), 0, False
 ```
 
-## 6. Crear la tarea automática
-
-Pega todo el siguiente comando en una sola línea de PowerShell:
+Registra e inicia la tarea:
 
 ```powershell
-$TaskName="Tickets Bodega"; $ProjectPath="C:\Apps\tickets_bodega"; $VbsPath=Join-Path $ProjectPath "start-listener.vbs"; $TaskUser=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; $WScriptPath="$env:WINDIR\System32\wscript.exe"; Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue; $Action=New-ScheduledTaskAction -Execute $WScriptPath -Argument ('"' + $VbsPath + '"'); $Trigger=New-ScheduledTaskTrigger -AtLogOn -User $TaskUser; $Principal=New-ScheduledTaskPrincipal -UserId $TaskUser -LogonType Interactive -RunLevel Limited; $Settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1); Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings -Description "Listener oculto de tickets" -Force; Start-ScheduledTask -TaskName $TaskName
+$TaskName = "Tickets OnlyCB"
+$ProjectPath = "C:\Apps\tickets_bodega_onlyCB"
+$VbsPath = Join-Path $ProjectPath "start-listener.vbs"
+$TaskUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$WScriptPath = "$env:WINDIR\System32\wscript.exe"
+$Action = New-ScheduledTaskAction -Execute $WScriptPath -Argument ('"' + $VbsPath + '"')
+$Trigger = New-ScheduledTaskTrigger -AtLogOn -User $TaskUser
+$Principal = New-ScheduledTaskPrincipal -UserId $TaskUser -LogonType Interactive -RunLevel Limited
+$Settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings -Description "Listener oculto de Tickets OnlyCB" -Force
+Start-ScheduledTask -TaskName $TaskName
 ```
 
-## 7. Verificar que inició correctamente
+## 5. Verificar
 
-```powershell
-Get-ScheduledTask -TaskName "Tickets Bodega" |
-Select-Object TaskName,State
-
-Get-ScheduledTaskInfo -TaskName "Tickets Bodega"
-
-Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
-Where-Object { $_.CommandLine -like "*listener.js*" } |
-Select-Object ProcessId,CommandLine
-```
-
-La verificación correcta es:
-
-- `State: Ready`.
-- `LastTaskResult: 0`.
-- Un solo proceso `node.exe` ejecutando `listener.js`.
-- Ninguna ventana negra visible.
-
-`Ready` es normal: significa que la tarea quedó preparada para el siguiente inicio de sesión y el listener ya fue iniciado en segundo plano.
-
-## 8. Después de reiniciar la PC
-
-No ejecutes manualmente `node listener.js`, porque podrías crear un segundo listener y provocar impresiones duplicadas.
-
-Después de iniciar sesión, verifica solamente:
+Debe existir un solo listener:
 
 ```powershell
 Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
-Where-Object { $_.CommandLine -like "*listener.js*" } |
+Where-Object { $_.CommandLine -like "*tickets_bodega_onlyCB*listener.js*" } |
 Select-Object ProcessId,CommandLine
 ```
 
-Debe aparecer una sola fila.
+Para actualizarlo después:
+
+```powershell
+Set-Location C:\Apps\tickets_bodega_onlyCB
+git pull origin master
+npm.cmd ci
+Restart-ScheduledTask -TaskName "Tickets OnlyCB"
+```
+
+No ejecutes `node listener.js` manualmente si la tarea ya está activa; podrías crear un segundo listener.
