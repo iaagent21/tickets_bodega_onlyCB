@@ -55,6 +55,7 @@ ESCPOS_TRANSPORT=lpr
 ESCPOS_HOST=192.168.4.6
 ESCPOS_PORT=515
 ESCPOS_QUEUE=LPT
+ESCPOS_FEED_LINES=3
 ```
 
 También puedes usar `ESCPOS_HOST=BODEGA1` si ese nombre resuelve en la red. Con `ESCPOS_TRANSPORT=windows` se conserva la ruta de la cola de Windows y `PRINTER_NAME` debe ser el nombre exacto de esa cola.

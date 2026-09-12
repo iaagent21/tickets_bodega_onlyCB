@@ -27,7 +27,7 @@ function getEscPosOptions(environment = process.env) {
     paperWidthDots: parsePositiveInteger(environment.ESCPOS_WIDTH_DOTS, 'ESCPOS_WIDTH_DOTS', 512, 2_048),
     barcodeScale: parsePositiveInteger(environment.ESCPOS_BARCODE_SCALE, 'ESCPOS_BARCODE_SCALE', 2, 8),
     barcodeHeight: parsePositiveInteger(environment.ESCPOS_BARCODE_HEIGHT, 'ESCPOS_BARCODE_HEIGHT', 72, 512),
-    feedLines: parsePositiveInteger(environment.ESCPOS_FEED_LINES, 'ESCPOS_FEED_LINES', 1, 10),
+    feedLines: parsePositiveInteger(environment.ESCPOS_FEED_LINES, 'ESCPOS_FEED_LINES', 3, 10),
   };
 }
 

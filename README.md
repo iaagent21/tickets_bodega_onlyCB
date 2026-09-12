@@ -87,7 +87,8 @@ ESCPOS_QUEUE=LPT
 ESCPOS_WIDTH_DOTS=512
 ESCPOS_BARCODE_SCALE=2
 ESCPOS_BARCODE_HEIGHT=72
-ESCPOS_FEED_LINES=1
+# Líneas de separación después del ticket de barras antes del siguiente ticket.
+ESCPOS_FEED_LINES=3
 
 # Lease para evitar duplicados dentro de la misma PC.
 LEASE_SECONDS=120

@@ -17,6 +17,12 @@ test('genera un ticket ESC/POS centrado sin comando de corte', () => {
   assert.equal(ticket.includes(Buffer.from([0x1d, 0x56])), false);
 });
 
+test('deja separación después del ticket ESC/POS por defecto', () => {
+  const ticket = createEscPosTicket('0013481', 'CLIENTE');
+
+  assert.deepEqual(ticket.subarray(-3), Buffer.from([0x0a, 0x0a, 0x0a]));
+});
+
 test('rechaza un pedido que no cabe en el ancho ESC/POS', () => {
   assert.throws(
     () => createEscPosTicket('0013481', 'CLIENTE', { paperWidthDots: 64 }),
