@@ -120,3 +120,26 @@ Restart-ScheduledTask -TaskName "Tickets OnlyCB"
 ```
 
 No ejecutes `node listener.js` manualmente si la tarea ya está activa; podrías crear un segundo listener.
+
+## 6. Quitar el arranque automático
+
+Para detenerlo ahora y evitar que vuelva a iniciar con Windows:
+
+```powershell
+Stop-ScheduledTask -TaskName "Tickets OnlyCB" -ErrorAction SilentlyContinue
+Disable-ScheduledTask -TaskName "Tickets OnlyCB"
+```
+
+Para volver a activarlo:
+
+```powershell
+Enable-ScheduledTask -TaskName "Tickets OnlyCB"
+Start-ScheduledTask -TaskName "Tickets OnlyCB"
+```
+
+Para eliminar por completo la tarea programada:
+
+```powershell
+Stop-ScheduledTask -TaskName "Tickets OnlyCB" -ErrorAction SilentlyContinue
+Unregister-ScheduledTask -TaskName "Tickets OnlyCB" -Confirm:$false
+```
