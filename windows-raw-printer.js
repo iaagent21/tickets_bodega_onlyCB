@@ -1,8 +1,11 @@
 const { execFile } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const POWERSHELL_SCRIPT = String.raw`
-$printerName = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($args[0]))
-$payload = [Convert]::FromBase64String($args[1])
+$printerName = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:ESC_POS_PRINTER_B64))
+$payload = [Convert]::FromBase64String($env:ESC_POS_PAYLOAD_B64)
 
 Add-Type @"
 using System;
@@ -109,17 +112,33 @@ function printRawToWindowsPrinter(printerName, data, timeoutMs = 15_000) {
   if (!normalizedPrinterName) return Promise.reject(new Error('PRINTER_NAME es obligatorio para PRINT_MODE=escpos.'));
   if (!Buffer.isBuffer(data) || data.length === 0) return Promise.reject(new Error('El trabajo ESC/POS está vacío.'));
 
-  const printerNameBase64 = Buffer.from(normalizedPrinterName, 'utf8').toString('base64');
+  return runPowerShellRawPrint(normalizedPrinterName, data, timeoutMs).catch(async (nativeError) => {
+    try {
+      await printRawViaSharedQueue(normalizedPrinterName, data, timeoutMs);
+      return;
+    } catch (sharedError) {
+      throw new Error(`${nativeError.message} También falló la cola compartida: ${sharedError.message}`);
+    }
+  });
+}
+
+function runPowerShellRawPrint(printerName, data, timeoutMs) {
+  const printerNameBase64 = Buffer.from(printerName, 'utf8').toString('base64');
   const payloadBase64 = data.toString('base64');
+  const childEnvironment = {
+    ...process.env,
+    ESC_POS_PRINTER_B64: printerNameBase64,
+    ESC_POS_PAYLOAD_B64: payloadBase64,
+  };
   return new Promise((resolve, reject) => {
     execFile(
       'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', POWERSHELL_SCRIPT, printerNameBase64, payloadBase64],
-      { windowsHide: true, timeout: timeoutMs, maxBuffer: 1_000_000 },
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', POWERSHELL_SCRIPT],
+      { windowsHide: true, timeout: timeoutMs, maxBuffer: 1_000_000, env: childEnvironment },
       (error, stdout, stderr) => {
         if (error) {
           const detail = String(stderr || stdout || error.message).trim();
-          reject(new Error(`No se pudo enviar el trabajo ESC/POS a ${normalizedPrinterName}: ${detail}`));
+          reject(new Error(`No se pudo enviar el trabajo ESC/POS a ${printerName}: ${detail}`));
           return;
         }
         resolve();
@@ -128,4 +147,30 @@ function printRawToWindowsPrinter(printerName, data, timeoutMs = 15_000) {
   });
 }
 
-module.exports = { printRawToWindowsPrinter };
+function printRawViaSharedQueue(printerName, data, timeoutMs) {
+  if (!/^[A-Za-z0-9._ -]{1,128}$/.test(printerName)) {
+    return Promise.reject(new Error('PRINTER_NAME contiene caracteres no compatibles con la cola compartida de Windows.'));
+  }
+
+  const filePath = path.join(os.tmpdir(), `escanersglobal-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.prn`);
+  const sharePath = `\\\\localhost\\${printerName}`;
+  fs.writeFileSync(filePath, data);
+
+  return new Promise((resolve, reject) => {
+    const command = `copy /b "${filePath}" "${sharePath}"`;
+    execFile('cmd.exe', ['/d', '/c', command], { windowsHide: true, timeout: timeoutMs, maxBuffer: 1_000_000 }, (error, stdout, stderr) => {
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+        // El archivo temporal se puede limpiar en el siguiente mantenimiento del sistema.
+      }
+      if (error) {
+        reject(new Error(String(stderr || stdout || error.message).trim()));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+module.exports = { printRawToWindowsPrinter, printRawViaSharedQueue };
