@@ -1,9 +1,10 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { print } = require('pdf-to-printer');
 const { createApiClient } = require('./api-client');
-const { createTicketPdf } = require('./ticket-pdf');
+const { parsePrintMode, parsePositiveInteger, getEscPosOptions } = require('./print-config');
+const { createTicketArtifact, artifactState } = require('./ticket-output');
+const { printTicketWithRetry } = require('./ticket-printer');
 
 require('dotenv').config();
 
@@ -12,14 +13,6 @@ function parseBoolean(value, name) {
   if (normalized === 'true') return true;
   if (normalized === 'false') return false;
   throw new Error(`${name} debe ser true o false.`);
-}
-
-function parsePositiveInteger(value, name, fallback, max) {
-  const parsed = value === undefined || value === '' ? fallback : Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > max) {
-    throw new Error(`${name} debe ser un entero entre 1 y ${max}.`);
-  }
-  return parsed;
 }
 
 const {
@@ -33,15 +26,18 @@ const {
 
 const DRY_RUN = parseBoolean(process.env.DRY_RUN ?? 'false', 'DRY_RUN');
 const AUTO_PRINT = parseBoolean(process.env.AUTO_PRINT ?? 'true', 'AUTO_PRINT');
+const PRINT_MODE = parsePrintMode(process.env.PRINT_MODE ?? 'pdf');
 const API_TIMEOUT_MS = parsePositiveInteger(process.env.API_TIMEOUT_MS, 'API_TIMEOUT_MS', 15_000, 120_000);
 const LEASE_SECONDS = parsePositiveInteger(process.env.LEASE_SECONDS, 'LEASE_SECONDS', 120, 900);
 const PENDING_POLL_MS = parsePositiveInteger(process.env.PENDING_POLL_MS, 'PENDING_POLL_MS', 30_000, 15 * 60_000);
+const ESCPOS_OPTIONS = getEscPosOptions(process.env);
 
 const missingVars = [
   !STORE_USER_EMAIL && 'STORE_USER_EMAIL',
   !STORE_USER_PASSWORD && 'STORE_USER_PASSWORD',
   !API_URL && 'API_URL',
   !TIENDA && 'TIENDA',
+  PRINT_MODE === 'escpos' && AUTO_PRINT && !String(PRINTER_NAME).trim() && 'PRINTER_NAME (obligatoria con PRINT_MODE=escpos)',
 ].filter(Boolean);
 
 if (missingVars.length > 0) {
@@ -104,25 +100,6 @@ function updateJobState(job, status, extra = {}) {
   saveState();
 }
 
-async function printWithRetry(pdfPath) {
-  const options = {
-    ...(PRINTER_NAME ? { printer: PRINTER_NAME } : {}),
-    orientation: 'landscape',
-    scale: 'noscale',
-  };
-  let lastError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      await print(pdfPath, options);
-      return;
-    } catch (error) {
-      lastError = error;
-      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 1_000));
-    }
-  }
-  throw lastError;
-}
-
 function isClaimConflict(error) {
   return error?.status === 409;
 }
@@ -166,13 +143,18 @@ async function processJob(job, apiClient, previewedJobs) {
   if (DRY_RUN || !AUTO_PRINT) {
     try {
       if (!DRY_RUN) {
-        const result = await createTicketPdf(pedidoId, clienteNombre, ticketsDir);
+        const result = await createTicketArtifact({
+          pedidoId,
+          clienteNombre,
+          ticketsDir,
+          printMode: PRINT_MODE,
+          escposOptions: ESCPOS_OPTIONS,
+        });
         updateJobState(job, 'previewed', {
-          pdfPath: result.pdfPath,
-          renderedItems: result.renderedItems,
+          ...artifactState(result),
           clienteNombre,
         });
-        console.log(`PDF de vista previa con código de barras generado: ${result.pdfPath}`);
+        console.log(`Archivo de vista previa ${PRINT_MODE.toUpperCase()} generado: ${result.artifactPath}`);
       } else {
         updateJobState(job, 'dry_run', { clienteNombre });
         console.log(`Vista previa de código de barras para #${pedidoId}.`);
@@ -228,19 +210,26 @@ async function processJob(job, apiClient, previewedJobs) {
       clienteNombre,
     });
 
-    const result = await createTicketPdf(pedidoId, clienteNombre, ticketsDir);
+    const result = await createTicketArtifact({
+      pedidoId,
+      clienteNombre,
+      ticketsDir,
+      printMode: PRINT_MODE,
+      escposOptions: ESCPOS_OPTIONS,
+    });
     updateJobState(job, 'generated', {
-      pdfPath: result.pdfPath,
-      renderedItems: result.renderedItems,
+      ...artifactState(result),
       clienteNombre,
     });
-    console.log(`PDF de código de barras generado: ${result.pdfPath}`);
+    console.log(`${PRINT_MODE.toUpperCase()} generado: ${result.artifactPath}`);
 
-    await printWithRetry(result.pdfPath);
+    await printTicketWithRetry(result, {
+      printerName: PRINTER_NAME,
+      timeoutMs: API_TIMEOUT_MS,
+    });
     physicalPrintSucceeded = true;
     updateJobState(job, 'printed_unconfirmed', {
-      pdfPath: result.pdfPath,
-      renderedItems: result.renderedItems,
+      ...artifactState(result),
       clienteNombre,
     });
     console.log(`Ticket #${pedidoId} enviado a ${PRINTER_NAME || 'la impresora predeterminada'}.`);
@@ -248,15 +237,13 @@ async function processJob(job, apiClient, previewedJobs) {
     try {
       const printed = await apiClient.markTicketJobPrinted(job.id, clientId);
       updateJobState(job, 'printed', {
-        pdfPath: result.pdfPath,
-        renderedItems: result.renderedItems,
+        ...artifactState(result),
         clienteNombre,
       });
       console.log(`Job ${job.id} confirmado como ${printed?.reason || 'printed'}.`);
     } catch (error) {
       updateJobState(job, 'printed_unconfirmed', {
-        pdfPath: result.pdfPath,
-        renderedItems: result.renderedItems,
+        ...artifactState(result),
         clienteNombre,
         error: error.message,
       });
@@ -384,6 +371,7 @@ async function main() {
   console.log(`   Cliente: ${clientId}`);
   console.log(`   Modo simulación: ${DRY_RUN ? 'ACTIVADO' : 'DESACTIVADO'}`);
   console.log(`   Impresión automática: ${AUTO_PRINT ? 'ACTIVADA' : 'DESACTIVADA'}`);
+  console.log(`   Formato de impresión: ${PRINT_MODE.toUpperCase()}`);
   console.log('   Fuente: /tickets/stream + /tickets/pending');
   console.log('==================================================');
 

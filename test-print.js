@@ -1,8 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-const { print } = require('pdf-to-printer');
 const { createApiClient } = require('./api-client');
-const { createTicketPdf } = require('./ticket-pdf');
+const { parsePrintMode, getEscPosOptions } = require('./print-config');
+const { createTicketArtifact } = require('./ticket-output');
+const { printTicketArtifact } = require('./ticket-printer');
 
 require('dotenv').config();
 
@@ -21,12 +22,15 @@ const {
   AUTO_PRINT = 'false',
   PRINTER_NAME = '',
 } = process.env;
+const PRINT_MODE = parsePrintMode(process.env.PRINT_MODE ?? 'pdf');
+const shouldPrint = String(AUTO_PRINT).trim().toLowerCase() === 'true';
 
 const missingVars = [
   !API_URL && 'API_URL',
   !STORE_USER_EMAIL && 'STORE_USER_EMAIL',
   !STORE_USER_PASSWORD && 'STORE_USER_PASSWORD',
   !TIENDA && 'TIENDA',
+  PRINT_MODE === 'escpos' && shouldPrint && !String(PRINTER_NAME).trim() && 'PRINTER_NAME (obligatoria con PRINT_MODE=escpos)',
 ].filter(Boolean);
 
 if (missingVars.length > 0) {
@@ -34,7 +38,6 @@ if (missingVars.length > 0) {
   process.exit(1);
 }
 
-const shouldPrint = String(AUTO_PRINT).trim().toLowerCase() === 'true';
 const ticketsDir = path.join(__dirname, 'tickets');
 fs.mkdirSync(ticketsDir, { recursive: true });
 
@@ -50,15 +53,17 @@ async function main() {
   const rutaData = await apiClient.fetchPickingRoute(pedidoId);
   const clienteNombre = String(rutaData?.nombre ?? '').trim();
   console.log(`Cliente obtenido de la API: ${clienteNombre || 'no informado'}.`);
-  const result = await createTicketPdf(pedidoId, clienteNombre, ticketsDir);
-  console.log(`PDF generado: ${result.pdfPath}`);
+  const result = await createTicketArtifact({
+    pedidoId,
+    clienteNombre,
+    ticketsDir,
+    printMode: PRINT_MODE,
+    escposOptions: getEscPosOptions(process.env),
+  });
+  console.log(`${PRINT_MODE.toUpperCase()} generado: ${result.artifactPath}`);
 
   if (shouldPrint) {
-    await print(result.pdfPath, {
-      ...(PRINTER_NAME ? { printer: PRINTER_NAME } : {}),
-      orientation: 'landscape',
-      scale: 'noscale',
-    });
+    await printTicketArtifact(result, { printerName: PRINTER_NAME });
     console.log(`Ticket enviado a ${PRINTER_NAME || 'la impresora predeterminada'}.`);
   }
 }

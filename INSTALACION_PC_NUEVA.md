@@ -40,20 +40,23 @@ STORE_USER_PASSWORD=contraseña
 API_URL=https://ferreteriasgd-api-cb.w8k0jk.easypanel.host
 TIENDA=la4ta
 AUTO_PRINT=true
+PRINT_MODE=pdf
 PRINTER_NAME=Nombre_exacto_de_la_impresora_termica
 TICKET_CLIENT_ID=pc-tickets-la4ta-01
 ```
 
 El usuario debe tener acceso a `etiquetas`, permiso de consulta y acceso a la tienda. No configures variables de Supabase. Cada PC debe usar un `TICKET_CLIENT_ID` diferente.
 
+`PRINT_MODE=pdf` conserva el flujo actual. Para una PC con cola `Generic / Text Only` puedes usar `PRINT_MODE=escpos` y configurar `PRINTER_NAME` con el nombre exacto de la cola de Windows (por ejemplo `BODEGAS1`). Ambos modos usan la cola y el puerto ya configurados; el programa no modifica el D-Link ni la impresora.
+
 ## 3. Probar antes de automatizar
 
-Genera un PDF sin imprimir:
+Genera el archivo configurado sin imprimir:
 
 ```powershell
 $env:AUTO_PRINT = "false"
 node test-print.js 0098098
-Start-Process .\tickets\pedido_0098098.pdf
+Get-ChildItem .\tickets\pedido_0098098.*
 ```
 
 Si el PDF es correcto, elimina la variable temporal:
@@ -62,7 +65,7 @@ Si el PDF es correcto, elimina la variable temporal:
 Remove-Item Env:AUTO_PRINT
 ```
 
-Para imprimir físicamente, `PRINTER_NAME` debe ser el nombre de la impresora térmica, no Microsoft Print to PDF ni XPS. El programa envía el ticket horizontal y sin escalado.
+Para imprimir físicamente, `PRINTER_NAME` debe ser el nombre de la cola de Windows, no el nombre del equipo ni la IP del D-Link. En PDF se conserva la orientación horizontal y sin escalado. En ESC/POS se envían bytes RAW a esa misma cola y no se manda comando de corte.
 
 ## 4. Iniciar automáticamente y oculto
 

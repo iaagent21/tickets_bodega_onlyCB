@@ -19,7 +19,7 @@ La PC se comunica exclusivamente con la API. No necesita `SUPABASE_URL`, `SUPABA
 3. Recupera periódicamente `GET /tickets/pending` para su `TICKET_CLIENT_ID`, incluyendo jobs fallidos y leases vencidos.
 4. Reclama cada job con `POST /tickets/jobs/:id/claim` antes de procesarlo.
 5. Consulta `GET /picking/ruta/:pedido` en la API y extrae el nombre del cliente de `nombre`.
-6. Genera un PDF horizontal con el código de barras Code128 y el texto `Pedido: #... - Cliente: ...`.
+6. Genera la salida configurada en `PRINT_MODE`: PDF horizontal o bytes ESC/POS RAW con código de barras y el texto `Pedido: #... - Cliente: ...`.
 7. Imprime el ticket y confirma con `POST /tickets/jobs/:id/printed`.
 8. Si ocurre un error antes de imprimir, reporta `POST /tickets/jobs/:id/failed`.
 
@@ -28,6 +28,8 @@ La deduplicación se realiza por `(job_id, TICKET_CLIENT_ID)`. Cada PC de la mis
 ## Contenido del ticket
 
 El PDF mide 80 mm de ancho por 1.5 pulgadas de alto y contiene el código de barras Code128 generado con el número de pedido y una línea con el pedido y el cliente. El nombre se obtiene de la respuesta de la API. No se consulta Supabase desde esta PC. Si el nombre no existe, imprime `Cliente no informado`.
+
+Con `PRINT_MODE=escpos`, el programa genera un trabajo RAW para la misma cola de Windows (`PRINTER_NAME`, por ejemplo `BODEGAS1`) usando `WritePrinter`. No cambia el D-Link, su IP, su puerto ni el controlador instalado. Tampoco envía el comando de corte automático. Este modo está pensado para colas `Generic / Text Only` y comandos ESC/POS.
 
 ## Instalación en Windows
 
@@ -69,8 +71,17 @@ DRY_RUN=false
 # Producción: true. Reclama jobs e imprime códigos de barras.
 AUTO_PRINT=true
 
-# Vacío = impresora predeterminada de Windows.
+# pdf conserva la impresión actual; escpos envía RAW ESC/POS a la misma cola.
+PRINT_MODE=pdf
+
+# Nombre exacto de la cola de Windows. En escpos es obligatorio, por ejemplo BODEGAS1.
 PRINTER_NAME=
+
+# Sólo para PRINT_MODE=escpos.
+ESCPOS_WIDTH_DOTS=512
+ESCPOS_BARCODE_SCALE=2
+ESCPOS_BARCODE_HEIGHT=72
+ESCPOS_FEED_LINES=1
 
 # Lease para evitar duplicados dentro de la misma PC.
 LEASE_SECONDS=120
@@ -101,7 +112,8 @@ Variables importantes:
 | --- | --- |
 | `DRY_RUN` | `false` en producción; `true` para diagnóstico sin reclamar jobs. |
 | `AUTO_PRINT` | `true` en producción; `false` genera vista previa sin confirmar jobs. |
-| `PRINTER_NAME` | Vacío para usar la predeterminada o el nombre exacto de Windows. |
+| `PRINT_MODE` | `pdf` mantiene el flujo actual; `escpos` envía datos RAW a la cola de Windows. |
+| `PRINTER_NAME` | Nombre exacto de Windows; obligatorio en `escpos`, por ejemplo `BODEGAS1`. |
 | `TICKET_CLIENT_ID` | Un valor distinto por cada PC de tickets. |
 
 No configures `SUPABASE_URL`, `SUPABASE_KEY`, `PEDIDOS_TABLE`, `SUPABASE_SERVICE_ROLE_KEY` ni ninguna otra credencial de Supabase en la PC de tickets.
@@ -126,10 +138,10 @@ Para generar y probar el ticket de un pedido específico:
 node test-print.js 0098072
 ```
 
-El comportamiento de `test-print.js` usa `AUTO_PRINT` del `.env`:
+El comportamiento de `test-print.js` usa `AUTO_PRINT` y `PRINT_MODE` del `.env`:
 
-- `AUTO_PRINT=false`: genera el PDF sin imprimir.
-- `AUTO_PRINT=true`: genera e imprime.
+- `AUTO_PRINT=false`: genera el PDF o archivo `.escpos.bin` sin imprimir.
+- `AUTO_PRINT=true`: genera e imprime en el formato configurado.
 
 La prueba consulta el cliente mediante `GET /picking/ruta/:pedido`, igual que el listener. No reclama ni confirma un job; se utiliza para verificar el ticket y la impresora.
 
@@ -172,7 +184,7 @@ Verifica que `API_URL` sea correcta, que la API esté disponible y que las migra
 
 ### La impresora no responde
 
-Confirma que Windows pueda imprimir una página de prueba y configura `PRINTER_NAME` con el nombre exacto de la impresora. El programa envía el ticket en orientación horizontal y sin escalado.
+Confirma que Windows pueda imprimir una página de prueba y configura `PRINTER_NAME` con el nombre exacto de la cola. PDF conserva la orientación horizontal y sin escalado; ESC/POS envía datos RAW a esa misma cola sin tocar el D-Link.
 
 ### Se necesita cambiar de tienda
 
@@ -185,6 +197,10 @@ Edita `TIENDA` y usa credenciales autorizadas para esa tienda. No reutilices el 
 | `listener.js` | SSE, recuperación, cola, claim, deduplicación e impresión. |
 | `api-client.js` | Login, refresh, stream, consulta de pedido y jobs. |
 | `ticket-pdf.js` | Generación del PDF horizontal con código, pedido y cliente. |
+| `escpos-ticket.js` | Generación de bytes ESC/POS, código de barras raster y texto. |
+| `windows-raw-printer.js` | Envío RAW a una cola de impresión de Windows. |
+| `ticket-output.js` | Selección y creación del artefacto PDF o ESC/POS. |
+| `ticket-printer.js` | Impresión con reintentos según `PRINT_MODE`. |
 | `test-print.js` | Prueba manual de un pedido. |
 | `.env.example` | Plantilla segura de configuración. |
 
