@@ -172,7 +172,7 @@ Verifica que `API_URL` sea correcta, que la API esté disponible y que las migra
 
 ### La impresora no responde
 
-Confirma que Windows pueda imprimir una página de prueba y configura `PRINTER_NAME` con el nombre exacto de la impresora.
+Confirma que Windows pueda imprimir una página de prueba y configura `PRINTER_NAME` con el nombre exacto de la impresora. El programa envía el ticket en orientación horizontal y sin escalado.
 
 ### Se necesita cambiar de tienda
 

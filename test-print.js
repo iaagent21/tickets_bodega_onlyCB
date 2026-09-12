@@ -54,7 +54,11 @@ async function main() {
   console.log(`PDF generado: ${result.pdfPath}`);
 
   if (shouldPrint) {
-    await print(result.pdfPath, PRINTER_NAME ? { printer: PRINTER_NAME } : {});
+    await print(result.pdfPath, {
+      ...(PRINTER_NAME ? { printer: PRINTER_NAME } : {}),
+      orientation: 'landscape',
+      scale: 'noscale',
+    });
     console.log(`Ticket enviado a ${PRINTER_NAME || 'la impresora predeterminada'}.`);
   }
 }

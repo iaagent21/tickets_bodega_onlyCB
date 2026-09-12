@@ -62,7 +62,7 @@ Si el PDF es correcto, elimina la variable temporal:
 Remove-Item Env:AUTO_PRINT
 ```
 
-Para imprimir físicamente, `PRINTER_NAME` debe ser el nombre de la impresora térmica, no Microsoft Print to PDF ni XPS.
+Para imprimir físicamente, `PRINTER_NAME` debe ser el nombre de la impresora térmica, no Microsoft Print to PDF ni XPS. El programa envía el ticket horizontal y sin escalado.
 
 ## 4. Iniciar automáticamente y oculto
 

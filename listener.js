@@ -105,7 +105,11 @@ function updateJobState(job, status, extra = {}) {
 }
 
 async function printWithRetry(pdfPath) {
-  const options = PRINTER_NAME ? { printer: PRINTER_NAME } : {};
+  const options = {
+    ...(PRINTER_NAME ? { printer: PRINTER_NAME } : {}),
+    orientation: 'landscape',
+    scale: 'noscale',
+  };
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
