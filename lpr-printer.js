@@ -21,6 +21,7 @@ function connectToLpr(host, port, timeoutMs) {
     const onTimeout = () => finish(reject, new Error(`Tiempo agotado al conectar con el servidor LPR ${host}:${port}.`));
     socket.once('connect', () => {
       socket.setTimeout(0);
+      socket.setNoDelay(true);
       finish(resolve, socket);
     });
     socket.once('error', onError);
@@ -92,8 +93,7 @@ async function sendLprFile(session, data, filename, command) {
   ]);
   await session.write(header);
   await session.waitForAck();
-  await session.write(data);
-  await session.write(Buffer.from([0]));
+  await session.write(Buffer.concat([data, Buffer.from([0])]));
   await session.waitForAck();
 }
 
@@ -125,27 +125,23 @@ async function printLprRaw(data, options = {}) {
   ].join('\n'), 'ascii');
 
   const socket = await connectToLpr(host, port, timeoutMs);
+  let jobAccepted = false;
   try {
     const session = createLprSession(socket, timeoutMs);
-    await session.write(Buffer.from([0x02]));
-    await session.write(Buffer.from(`${queue}\n`, 'ascii'));
+    await session.write(Buffer.concat([Buffer.from([0x02]), Buffer.from(`${queue}\n`, 'ascii')]));
     await session.waitForAck();
     // RFC 1179 permits either file order, but control-first is the most
     // compatible order for small print servers. ESC/POS must be sent with
     // command 0x03 (data file); command 0x02 is reserved for control files.
     await sendLprFile(session, controlFile, controlFilename, 0x02);
     await sendLprFile(session, data, dataFilename, 0x03);
+    // The final LPR ACK means the print server accepted the complete job.
+    // Do not wait for the remote device to close its TCP socket: some print
+    // servers keep it open while the printer is physically processing paper.
+    jobAccepted = true;
     socket.end();
-    await new Promise((resolve) => {
-      if (socket.destroyed) {
-        resolve();
-        return;
-      }
-      socket.once('close', resolve);
-      socket.once('error', resolve);
-    });
   } finally {
-    if (!socket.destroyed) socket.destroy();
+    if (!socket.destroyed && !jobAccepted) socket.destroy();
   }
 }
 

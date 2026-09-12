@@ -127,16 +127,18 @@ async function processJob(job, apiClient, previewedJobs) {
   }
 
   if (previewedJobs.has(job.id)) return;
+  const startedAt = Date.now();
+  const elapsed = () => `${Date.now() - startedAt} ms`;
   console.log(`[${new Date().toLocaleTimeString()}] Procesando ticket #${pedidoId} (job ${job.id})...`);
 
   let clienteNombre = '';
   try {
-    const rutaData = await apiClient.fetchPickingRoute(pedidoId);
-    clienteNombre = String(rutaData?.nombre ?? '').trim();
-    console.log(`Cliente obtenido de la API para #${pedidoId}: ${clienteNombre || 'no informado'}.`);
+    const orderInfo = await apiClient.fetchTicketOrderInfo(pedidoId);
+    clienteNombre = String(orderInfo?.nombre ?? '').trim();
+    console.log(`Cliente obtenido de la API para #${pedidoId}: ${clienteNombre || 'no informado'} (${elapsed()}).`);
   } catch (error) {
     updateJobState(job, 'client_lookup_failed', { error: error.message });
-    console.error(`No se pudo obtener el cliente de #${pedidoId}:`, error.message);
+    console.error(`No se pudo obtener el cliente de #${pedidoId} (${elapsed()}):`, error.message);
     return;
   }
 
@@ -206,6 +208,7 @@ async function processJob(job, apiClient, previewedJobs) {
       throw new Error(`La API no permitió reclamar el job ${job.id}: ${claim?.reason || 'respuesta inválida'}.`);
     }
     claimed = true;
+    console.log(`Job ${job.id} reclamado para #${pedidoId} (${elapsed()}).`);
     updateJobState(job, 'claimed', {
       attempts: claim?.job?.attempts ?? null,
       clienteNombre,
@@ -222,13 +225,14 @@ async function processJob(job, apiClient, previewedJobs) {
       ...artifactState(result),
       clienteNombre,
     });
-    console.log(`${PRINT_MODE.toUpperCase()} generado: ${result.artifactPath}`);
+    console.log(`${PRINT_MODE.toUpperCase()} generado: ${result.artifactPath} (${elapsed()}).`);
 
     await printTicketWithRetry(result, {
       printerName: PRINTER_NAME,
       timeoutMs: API_TIMEOUT_MS,
     });
     physicalPrintSucceeded = true;
+    console.log(`Transporte confirmó la impresión de #${pedidoId} (${elapsed()}).`);
     updateJobState(job, 'printed_unconfirmed', {
       ...artifactState(result),
       clienteNombre,
@@ -236,7 +240,7 @@ async function processJob(job, apiClient, previewedJobs) {
     const destination = PRINT_MODE === 'escpos' && ESCPOS_OPTIONS.transport === 'lpr'
       ? `${ESCPOS_OPTIONS.host}:${ESCPOS_OPTIONS.port}/${ESCPOS_OPTIONS.queue}`
       : (PRINTER_NAME || 'la impresora predeterminada');
-    console.log(`Ticket #${pedidoId} enviado a ${destination}.`);
+    console.log(`Ticket #${pedidoId} enviado a ${destination} (${elapsed()}).`);
 
     try {
       const printed = await apiClient.markTicketJobPrinted(job.id, clientId);
@@ -244,6 +248,7 @@ async function processJob(job, apiClient, previewedJobs) {
         ...artifactState(result),
         clienteNombre,
       });
+      console.log(`Job ${job.id} confirmado en la API (${elapsed()}).`);
       console.log(`Job ${job.id} confirmado como ${printed?.reason || 'printed'}.`);
     } catch (error) {
       updateJobState(job, 'printed_unconfirmed', {

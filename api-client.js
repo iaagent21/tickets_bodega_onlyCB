@@ -177,6 +177,16 @@ function createApiClient({ apiUrl, tienda, email, password, timeoutMs = 15_000 }
     return data;
   }
 
+  async function fetchTicketOrderInfo(pedido) {
+    const normalizedPedido = String(pedido ?? '').trim();
+    if (!normalizedPedido) throw new Error('El número de pedido es obligatorio.');
+    const data = await authenticatedJson(`/tickets/order-info/${encodeURIComponent(normalizedPedido)}`);
+    if (!data || typeof data !== 'object') {
+      throw new Error('La API devolvió una respuesta inválida para /tickets/order-info.');
+    }
+    return data;
+  }
+
   async function listPendingTicketJobs({ clientId, after = null, limit = 100 } = {}) {
     const normalizedClientId = String(clientId || '').trim();
     if (!normalizedClientId) throw new Error('clientId es obligatorio para consultar tickets pendientes.');
@@ -329,6 +339,7 @@ function createApiClient({ apiUrl, tienda, email, password, timeoutMs = 15_000 }
     refresh,
     getSession,
     fetchPickingRoute,
+    fetchTicketOrderInfo,
     listPendingTicketJobs,
     claimTicketJob,
     markTicketJobPrinted,
