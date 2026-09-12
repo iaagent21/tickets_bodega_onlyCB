@@ -1,4 +1,4 @@
-# Tickets de bodega
+# Tickets OnlyCB
 
 Servicio Node.js para recibir jobs de tickets desde EscanersGlobal, consultar el pedido mediante la API, generar un ticket compacto de 80 mm con el código de barras, pedido y cliente, e imprimirlo en Windows.
 
@@ -34,7 +34,7 @@ El PDF mide 80 mm de ancho por 1.5 pulgadas de alto y contiene el código de bar
 Abre PowerShell en la carpeta del proyecto:
 
 ```powershell
-cd C:\ruta\tickets_bodega
+cd C:\Apps\tickets_bodega_onlyCB
 npm ci
 Copy-Item .env.example .env
 notepad .env
