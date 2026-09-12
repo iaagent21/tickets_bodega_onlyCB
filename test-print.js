@@ -24,13 +24,15 @@ const {
 } = process.env;
 const PRINT_MODE = parsePrintMode(process.env.PRINT_MODE ?? 'pdf');
 const shouldPrint = String(AUTO_PRINT).trim().toLowerCase() === 'true';
+const ESCPOS_OPTIONS = getEscPosOptions(process.env);
 
 const missingVars = [
   !API_URL && 'API_URL',
   !STORE_USER_EMAIL && 'STORE_USER_EMAIL',
   !STORE_USER_PASSWORD && 'STORE_USER_PASSWORD',
   !TIENDA && 'TIENDA',
-  PRINT_MODE === 'escpos' && shouldPrint && !String(PRINTER_NAME).trim() && 'PRINTER_NAME (obligatoria con PRINT_MODE=escpos)',
+  PRINT_MODE === 'escpos' && shouldPrint && ESCPOS_OPTIONS.transport === 'windows' && !String(PRINTER_NAME).trim() && 'PRINTER_NAME (obligatoria con ESCPOS_TRANSPORT=windows)',
+  PRINT_MODE === 'escpos' && shouldPrint && ESCPOS_OPTIONS.transport === 'lpr' && !ESCPOS_OPTIONS.host && 'ESCPOS_HOST (obligatoria con ESCPOS_TRANSPORT=lpr)',
 ].filter(Boolean);
 
 if (missingVars.length > 0) {
@@ -58,13 +60,16 @@ async function main() {
     clienteNombre,
     ticketsDir,
     printMode: PRINT_MODE,
-    escposOptions: getEscPosOptions(process.env),
+    escposOptions: ESCPOS_OPTIONS,
   });
   console.log(`${PRINT_MODE.toUpperCase()} generado: ${result.artifactPath}`);
 
   if (shouldPrint) {
     await printTicketArtifact(result, { printerName: PRINTER_NAME });
-    console.log(`Ticket enviado a ${PRINTER_NAME || 'la impresora predeterminada'}.`);
+    const destination = PRINT_MODE === 'escpos' && ESCPOS_OPTIONS.transport === 'lpr'
+      ? `${ESCPOS_OPTIONS.host}:${ESCPOS_OPTIONS.port}/${ESCPOS_OPTIONS.queue}`
+      : (PRINTER_NAME || 'la impresora predeterminada');
+    console.log(`Ticket enviado a ${destination}.`);
   }
 }
 

@@ -29,7 +29,7 @@ La deduplicación se realiza por `(job_id, TICKET_CLIENT_ID)`. Cada PC de la mis
 
 El PDF mide 80 mm de ancho por 1.5 pulgadas de alto y contiene el código de barras Code128 generado con el número de pedido y una línea con el pedido y el cliente. El nombre se obtiene de la respuesta de la API. No se consulta Supabase desde esta PC. Si el nombre no existe, imprime `Cliente no informado`.
 
-Con `PRINT_MODE=escpos`, el programa genera un trabajo RAW para la misma cola de Windows (`PRINTER_NAME`, por ejemplo `BODEGAS1`) usando `WritePrinter`. No cambia el D-Link, su IP, su puerto ni el controlador instalado. Tampoco envía el comando de corte automático. Este modo está pensado para colas `Generic / Text Only` y comandos ESC/POS.
+Con `PRINT_MODE=escpos`, `ESCPOS_TRANSPORT=windows` genera un trabajo RAW para la misma cola de Windows (`PRINTER_NAME`, por ejemplo `BODEGAS1`) usando `WritePrinter`. Con `ESCPOS_TRANSPORT=lpr`, envía los bytes directamente al servidor de impresión existente usando `ESCPOS_HOST`, `ESCPOS_PORT` y `ESCPOS_QUEUE`; no cambia el D-Link, su IP, su puerto ni el controlador instalado. Tampoco envía el comando de corte automático.
 
 ## Instalación en Windows
 
@@ -71,11 +71,17 @@ DRY_RUN=false
 # Producción: true. Reclama jobs e imprime códigos de barras.
 AUTO_PRINT=true
 
-# pdf conserva la impresión actual; escpos envía RAW ESC/POS a la misma cola.
+# pdf conserva la impresión actual; escpos envía RAW ESC/POS.
 PRINT_MODE=pdf
 
-# Nombre exacto de la cola de Windows. En escpos es obligatorio, por ejemplo BODEGAS1.
+# windows: nombre exacto de la cola de Windows. Obligatorio con ese transporte.
 PRINTER_NAME=
+
+# lpr: conexión directa al servidor de impresión existente.
+ESCPOS_TRANSPORT=windows
+ESCPOS_HOST=
+ESCPOS_PORT=515
+ESCPOS_QUEUE=LPT
 
 # Sólo para PRINT_MODE=escpos.
 ESCPOS_WIDTH_DOTS=512
@@ -113,7 +119,11 @@ Variables importantes:
 | `DRY_RUN` | `false` en producción; `true` para diagnóstico sin reclamar jobs. |
 | `AUTO_PRINT` | `true` en producción; `false` genera vista previa sin confirmar jobs. |
 | `PRINT_MODE` | `pdf` mantiene el flujo actual; `escpos` envía datos RAW a la cola de Windows. |
-| `PRINTER_NAME` | Nombre exacto de Windows; obligatorio en `escpos`, por ejemplo `BODEGAS1`. |
+| `ESCPOS_TRANSPORT` | `windows` usa la cola actual; `lpr` envía directo al servidor de impresión. |
+| `PRINTER_NAME` | Nombre exacto de Windows; obligatorio con `ESCPOS_TRANSPORT=windows`. |
+| `ESCPOS_HOST` | Host/IP del servidor LPR; obligatorio con `ESCPOS_TRANSPORT=lpr`. |
+| `ESCPOS_PORT` | Puerto LPR; en este D-Link es `515`. |
+| `ESCPOS_QUEUE` | Cola LPR; en este D-Link es `LPT`. |
 | `TICKET_CLIENT_ID` | Un valor distinto por cada PC de tickets. |
 
 No configures `SUPABASE_URL`, `SUPABASE_KEY`, `PEDIDOS_TABLE`, `SUPABASE_SERVICE_ROLE_KEY` ni ninguna otra credencial de Supabase en la PC de tickets.
@@ -184,7 +194,7 @@ Verifica que `API_URL` sea correcta, que la API esté disponible y que las migra
 
 ### La impresora no responde
 
-Confirma que Windows pueda imprimir una página de prueba y configura `PRINTER_NAME` con el nombre exacto de la cola. PDF conserva la orientación horizontal y sin escalado; ESC/POS envía datos RAW a esa misma cola sin tocar el D-Link.
+Para PDF o ESC/POS mediante Windows, confirma que Windows pueda imprimir una página de prueba y configura `PRINTER_NAME` con el nombre exacto de la cola. Para ESC/POS directo, usa `ESCPOS_TRANSPORT=lpr`, `ESCPOS_HOST`, `ESCPOS_PORT=515` y `ESCPOS_QUEUE=LPT`; así no dependes de la cola local `ESDPRT001`. Ningún modo modifica el D-Link.
 
 ### Se necesita cambiar de tienda
 
@@ -201,6 +211,7 @@ Edita `TIENDA` y usa credenciales autorizadas para esa tienda. No reutilices el 
 | `windows-raw-printer.js` | Envío RAW a una cola de impresión de Windows. |
 | `ticket-output.js` | Selección y creación del artefacto PDF o ESC/POS. |
 | `ticket-printer.js` | Impresión con reintentos según `PRINT_MODE`. |
+| `lpr-printer.js` | Envío ESC/POS directo por LPR al servidor de impresión. |
 | `test-print.js` | Prueba manual de un pedido. |
 | `.env.example` | Plantilla segura de configuración. |
 

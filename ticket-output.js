@@ -29,6 +29,8 @@ async function createTicketArtifact({ pedidoId, clienteNombre, ticketsDir, print
     renderedItems: 0,
     expectedTotal: null,
     printMode: 'escpos',
+    transport: escposOptions?.transport ?? 'windows',
+    lprOptions: escposOptions,
   };
 }
 
@@ -38,6 +40,7 @@ function artifactState(artifact) {
     artifactPath: artifact.artifactPath,
     ...(artifact.pdfPath ? { pdfPath: artifact.pdfPath } : {}),
     renderedItems: artifact.renderedItems,
+    ...(artifact.printMode === 'escpos' ? { escposTransport: artifact.transport } : {}),
   };
 }
 

@@ -37,7 +37,8 @@ const missingVars = [
   !STORE_USER_PASSWORD && 'STORE_USER_PASSWORD',
   !API_URL && 'API_URL',
   !TIENDA && 'TIENDA',
-  PRINT_MODE === 'escpos' && AUTO_PRINT && !String(PRINTER_NAME).trim() && 'PRINTER_NAME (obligatoria con PRINT_MODE=escpos)',
+  PRINT_MODE === 'escpos' && AUTO_PRINT && ESCPOS_OPTIONS.transport === 'windows' && !String(PRINTER_NAME).trim() && 'PRINTER_NAME (obligatoria con ESCPOS_TRANSPORT=windows)',
+  PRINT_MODE === 'escpos' && AUTO_PRINT && ESCPOS_OPTIONS.transport === 'lpr' && !ESCPOS_OPTIONS.host && 'ESCPOS_HOST (obligatoria con ESCPOS_TRANSPORT=lpr)',
 ].filter(Boolean);
 
 if (missingVars.length > 0) {
@@ -232,7 +233,10 @@ async function processJob(job, apiClient, previewedJobs) {
       ...artifactState(result),
       clienteNombre,
     });
-    console.log(`Ticket #${pedidoId} enviado a ${PRINTER_NAME || 'la impresora predeterminada'}.`);
+    const destination = PRINT_MODE === 'escpos' && ESCPOS_OPTIONS.transport === 'lpr'
+      ? `${ESCPOS_OPTIONS.host}:${ESCPOS_OPTIONS.port}/${ESCPOS_OPTIONS.queue}`
+      : (PRINTER_NAME || 'la impresora predeterminada');
+    console.log(`Ticket #${pedidoId} enviado a ${destination}.`);
 
     try {
       const printed = await apiClient.markTicketJobPrinted(job.id, clientId);
@@ -372,6 +376,7 @@ async function main() {
   console.log(`   Modo simulación: ${DRY_RUN ? 'ACTIVADO' : 'DESACTIVADO'}`);
   console.log(`   Impresión automática: ${AUTO_PRINT ? 'ACTIVADA' : 'DESACTIVADA'}`);
   console.log(`   Formato de impresión: ${PRINT_MODE.toUpperCase()}`);
+  if (PRINT_MODE === 'escpos') console.log(`   Transporte ESC/POS: ${ESCPOS_OPTIONS.transport.toUpperCase()}`);
   console.log('   Fuente: /tickets/stream + /tickets/pending');
   console.log('==================================================');
 

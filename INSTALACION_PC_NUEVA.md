@@ -47,7 +47,17 @@ TICKET_CLIENT_ID=pc-tickets-la4ta-01
 
 El usuario debe tener acceso a `etiquetas`, permiso de consulta y acceso a la tienda. No configures variables de Supabase. Cada PC debe usar un `TICKET_CLIENT_ID` diferente.
 
-`PRINT_MODE=pdf` conserva el flujo actual. Para una PC con cola `Generic / Text Only` puedes usar `PRINT_MODE=escpos` y configurar `PRINTER_NAME` con el nombre exacto de la cola de Windows (por ejemplo `BODEGAS1`). Ambos modos usan la cola y el puerto ya configurados; el programa no modifica el D-Link ni la impresora.
+`PRINT_MODE=pdf` conserva el flujo actual. Para ESC/POS directo al D-Link usa esta configuración, sin cambiar el D-Link:
+
+```env
+PRINT_MODE=escpos
+ESCPOS_TRANSPORT=lpr
+ESCPOS_HOST=192.168.4.6
+ESCPOS_PORT=515
+ESCPOS_QUEUE=LPT
+```
+
+También puedes usar `ESCPOS_HOST=BODEGA1` si ese nombre resuelve en la red. Con `ESCPOS_TRANSPORT=windows` se conserva la ruta de la cola de Windows y `PRINTER_NAME` debe ser el nombre exacto de esa cola.
 
 ## 3. Probar antes de automatizar
 
@@ -65,7 +75,7 @@ Si el PDF es correcto, elimina la variable temporal:
 Remove-Item Env:AUTO_PRINT
 ```
 
-Para imprimir físicamente, `PRINTER_NAME` debe ser el nombre de la cola de Windows, no el nombre del equipo ni la IP del D-Link. En PDF se conserva la orientación horizontal y sin escalado. En ESC/POS se envían bytes RAW a esa misma cola y no se manda comando de corte.
+Para imprimir físicamente mediante Windows, `PRINTER_NAME` debe ser el nombre de la cola, no el nombre del equipo ni la IP del D-Link. En PDF se conserva la orientación horizontal y sin escalado. En ESC/POS por LPR se envían bytes RAW al servidor existente y no se manda comando de corte.
 
 ## 4. Iniciar automáticamente y oculto
 

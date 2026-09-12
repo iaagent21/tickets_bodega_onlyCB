@@ -1,9 +1,17 @@
 const { print } = require('pdf-to-printer');
 const { printRawToWindowsPrinter } = require('./windows-raw-printer');
+const { printLprRaw } = require('./lpr-printer');
 
 async function printTicketArtifact(artifact, { printerName, timeoutMs = 15_000 } = {}) {
   if (artifact.printMode === 'escpos') {
-    await printRawToWindowsPrinter(printerName, artifact.data, timeoutMs);
+    if (artifact.transport === 'lpr') {
+      await printLprRaw(artifact.data, {
+        ...artifact.lprOptions,
+        timeoutMs,
+      });
+    } else {
+      await printRawToWindowsPrinter(printerName, artifact.data, timeoutMs);
+    }
     return;
   }
 
