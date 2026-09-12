@@ -85,8 +85,11 @@ function createLprSession(socket, timeoutMs) {
   return { write, waitForAck };
 }
 
-async function sendLprFile(session, data, filename) {
-  const header = Buffer.from(`\x02${data.length} ${filename}\n`, 'ascii');
+async function sendLprFile(session, data, filename, command) {
+  const header = Buffer.concat([
+    Buffer.from([command]),
+    Buffer.from(`${data.length} ${filename}\n`, 'ascii'),
+  ]);
   await session.write(header);
   await session.waitForAck();
   await session.write(data);
@@ -107,17 +110,17 @@ async function printLprRaw(data, options = {}) {
   const clientHost = safeLprField(options.clientHost, os.hostname());
   const userName = safeLprField(options.userName, process.env.USERNAME || 'escanersglobal');
   const jobName = safeLprField(options.jobName, `ticket_${Date.now()}`);
-  const dataFilename = 'dfA001';
-  const controlFilename = 'cfA001';
+  const dataFilename = `dfA001${clientHost}`;
+  const controlFilename = `cfA001${clientHost}`;
   const controlFile = Buffer.from([
     `H${clientHost}`,
     `P${userName}`,
     `J${jobName}`,
     `C${clientHost}`,
     `L${userName}`,
-    `f${dataFilename}`,
+    `l${dataFilename}`,
     `U${dataFilename}`,
-    `N${jobName}`,
+    `N${dataFilename}`,
     '',
   ].join('\n'), 'ascii');
 
@@ -127,8 +130,11 @@ async function printLprRaw(data, options = {}) {
     await session.write(Buffer.from([0x02]));
     await session.write(Buffer.from(`${queue}\n`, 'ascii'));
     await session.waitForAck();
-    await sendLprFile(session, data, dataFilename);
-    await sendLprFile(session, controlFile, controlFilename);
+    // RFC 1179 permits either file order, but control-first is the most
+    // compatible order for small print servers. ESC/POS must be sent with
+    // command 0x03 (data file); command 0x02 is reserved for control files.
+    await sendLprFile(session, controlFile, controlFilename, 0x02);
+    await sendLprFile(session, data, dataFilename, 0x03);
     socket.end();
     await new Promise((resolve) => {
       if (socket.destroyed) {
