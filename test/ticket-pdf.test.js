@@ -33,7 +33,7 @@ test('el ticket contiene código, pedido y cliente', () => {
   assert.deepEqual(document.texts, ['Pedido: #0013481 - Cliente: JAVIER SOLANO']);
   assert.equal(result.renderedItems, 0);
   assert.equal(result.expectedTotal, null);
-  assert.equal(document.images[0].options.width, 205);
+  assert.equal(document.images[0].options.width, 82);
   assert.equal(document.images[0].options.height, 62);
 });
 

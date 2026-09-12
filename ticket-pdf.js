@@ -6,7 +6,7 @@ const bwipjs = require('bwip-js');
 const PAGE_WIDTH = 227; // 80 mm en puntos PDF.
 const PAGE_HEIGHT = 108; // 1.5 pulgadas de alto.
 const PAGE_MARGINS = { top: 8, bottom: 8, left: 10, right: 10 };
-const BARCODE_WIDTH = 205;
+const BARCODE_WIDTH = 82; // 60% menos que el ancho anterior.
 const BARCODE_HEIGHT = 62;
 
 function generateBarcodeBuffer(text) {
