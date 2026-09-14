@@ -23,6 +23,14 @@ test('deja separación después del ticket ESC/POS por defecto', () => {
   assert.deepEqual(ticket.subarray(-3), Buffer.from([0x0a, 0x0a, 0x0a]));
 });
 
+test('restaura la alineación izquierda para no afectar el siguiente ticket', () => {
+  const ticket = createEscPosTicket('0013481', 'CLIENTE', { feedLines: 1 });
+  const feedStart = ticket.length - 1;
+
+  assert.deepEqual(ticket.subarray(feedStart - 3, feedStart), Buffer.from([0x1b, 0x61, 0x00]));
+  assert.deepEqual(ticket.subarray(feedStart), Buffer.from([0x0a]));
+});
+
 test('rechaza un pedido que no cabe en el ancho ESC/POS', () => {
   assert.throws(
     () => createEscPosTicket('0013481', 'CLIENTE', { paperWidthDots: 64 }),

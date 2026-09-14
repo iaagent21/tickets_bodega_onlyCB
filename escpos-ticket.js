@@ -105,6 +105,7 @@ function createEscPosTicket(pedidoId, clienteNombre, options = {}) {
     Buffer.from([0x0a, ESC, 0x45, 0x01]), // Texto en negritas.
     Buffer.from(label, 'ascii'),
     Buffer.from([ESC, 0x45, 0x00, 0x0a]),
+    Buffer.from([ESC, 0x61, 0x00]), // Restaura la alineación izquierda para el siguiente trabajo.
     feed,
     // No se agrega GS V: el corte automático queda fuera del modo ESC/POS.
   ]);
